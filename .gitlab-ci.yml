@@ -1,0 +1,12 @@
+
+apply the infrastructure:
+  stage: deploy
+  image:
+    name: hashicorp/terraform:1.3.6
+    entrypoint: [""]
+  script:
+   - terraform -version
+   - terraform init
+   - terraform validate
+   - terraform plan
+   - terraform apply --auto-approve
