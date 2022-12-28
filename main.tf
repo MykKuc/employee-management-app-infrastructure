@@ -60,23 +60,68 @@ resource "aws_acm_certificate" "name" {
 }
 
 
-## Define the S3 Bucket.
-## ! There is other resource instead of website {}. It is called 'aws_s3_bucket_website_configuration'
-## 'aws_s3_bucket_policy'
-resource "aws_s3_bucket_policy" "name" {
-  
+## Define the S3 Bucket and static website hosting.
+## ++
+resource "aws_s3_bucket_policy" "s3_employeemanagementapp_com_policy" {
+  bucket = aws_s3_bucket.employeemanagementapp_com_bucket.id
+  policy = <<EOF
+        {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::employeemanagementapp.com/*"
+        }
+    ]
 }
-
-resource "aws_s3_bucket_policy" "name" {
-  
+  EOF
 }
-
+## ++
+resource "aws_s3_bucket_policy" "s3_www_employeemanagementapp_com_policy" {
+    bucket = aws_s3_bucket.www_employeemanagementapp_com_bucket.id
+    policy = <<EOF
+        {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::www.employeemanagementapp.com/*"
+        }
+    ]
+}
+EOF
+}
+#++
 resource "aws_s3_bucket" "employeemanagementapp_com_bucket" {
   bucket = "employeemanagementapp.com"
 }
-
+##++
 resource "aws_s3_bucket" "www_employeemanagementapp_com_bucket" {
   bucket = "www.employeemanagementapp.com"
+}
+
+##++
+resource "aws_s3_bucket_website_configuration" "employeemanagementapp_com_bucket_website" {
+  bucket = aws_s3_bucket.employeemanagementapp_com_bucket.bucket
+  index_document {
+    suffix = "index.html"
+  }
+}
+
+## ++
+resource "aws_s3_bucket_website_configuration" "www_employeemanagementapp_com_bucket_website" {
+  bucket = aws_s3_bucket.www_employeemanagementapp_com_bucket.bucket
+
+  redirect_all_requests_to {
+    host_name = aws_s3_bucket.employeemanagementapp_com_bucket.bucket
+    protocol = "https"
+  }
 }
 
 # There is another Terraform resource for Website Hosting.
