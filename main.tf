@@ -21,55 +21,99 @@ provider "aws" {
     region = "eu-west-2"
 }
 
-## Define the Route 53 Hosted Zone. 
+## Defined the Route 53 Hosted Zone. 
 resource "aws_route53_zone" "employeemanagement_com_hosted_zone" {
   name = "employeemanagementapp.com"
 }
 
-resource "aws_route53_record" "name" {
-  
+resource "aws_route53_record" "ns_record" {
+  name = "employeemanagementapp.com"
+  zone_id = aws_route53_zone.employeemanagement_com_hosted_zone.id
+  type = "NS"
+  records = aws_route53_zone.employeemanagement_com_hosted_zone.name_servers
 }
 
-resource "aws_route53_record" "name" {
-  
+resource "aws_route53_record" "www_employeemanagementapp_com_a_record" {
+  name = "www.employeemanagementapp.com"
+  zone_id = aws_route53_zone.employeemanagement_com_hosted_zone.id
+  type = "A"
 }
 
-resource "aws_route53_record" "name" {
-  
+resource "aws_route53_record" "employeemanagementapp_com_a_record" {
+  name = "employeemanagementapp.com"
+  zone_id = aws_route53_zone.employeemanagement_com_hosted_zone.id
+  type = "A"
 }
 
-resource "aws_route53_record" "name" {
-  
+resource "aws_route53_record" "api_employeemanagementapp_com_a_record" {
+  name = "api.employeemanagementapp.com"
+  zone_id = aws_route53_zone.employeemanagement_com_hosted_zone.id
+  type = "A"
 }
 
-resource "aws_route53_record" "name" {
-  
+resource "aws_route53_record" "soa_record" {
+  name = "employeemanagementapp.com"
+  zone_id = aws_route53_zone.employeemanagement_com_hosted_zone.id
+  type = "SOA"
 }
 
-## Define the CloudFront distributions.
-## Origins have to be S3 Buckets.
+
+## Defined the CloudFront distributions.
 resource "aws_cloudfront_distribution" "employeemanagementapp_com_distribution" {
 
   enabled = true
   origin {
-    domain_name = ""
+    domain_name = aws_s3_bucket.employeemanagementapp_com_bucket.bucket_regional_domain_name
+    origin_id = aws_s3_bucket.employeemanagementapp_com_bucket.id
+  }
 
-    origin_shield {
-      
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = aws_s3_bucket.employeemanagementapp_com_bucket.id
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
     }
   }
+
+  viewer_certificate {
+    acm_certificate_arn = aws_acm_certificate.employeemanagementapp_certificate.arn
+  }
+
 }
 
 resource "aws_cloudfront_distribution" "www_employeemanagementapp_com_distribution" {
 
   enabled = true
   origin {
-    domain_name = ""
+    domain_name = aws_s3_bucket.www_employeemanagementapp_com_bucket.bucket_regional_domain_name
+    origin_id = aws_s3_bucket.www_employeemanagementapp_com_bucket.id
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = aws_s3_bucket.www_employeemanagementapp_com_bucket.id
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn = aws_acm_certificate.employeemanagementapp_certificate.arn
   }
 }
 
 
-## ++ Definition of TLS/SSL certificate.
+## Definition of TLS/SSL certificate.
 resource "aws_acm_certificate" "employeemanagementapp_certificate" {
     domain_name = "employeemanagementapp.com"
     validation_method = "DNS"
@@ -79,7 +123,7 @@ resource "aws_acm_certificate" "employeemanagementapp_certificate" {
 }
 
 
-## ++ Define the S3 Bucket and static website hosting.
+## Defined the S3 Bucket and static website hosting.
 resource "aws_s3_bucket_policy" "s3_employeemanagementapp_com_policy" {
   bucket = aws_s3_bucket.employeemanagementapp_com_bucket.id
   policy = <<EOF
@@ -143,18 +187,17 @@ resource "aws_s3_bucket_website_configuration" "www_employeemanagementapp_com_bu
 }
 
 
-## ++ Define the EC2 Instances and key pairs to allow to SSH and Security Groups.
-## ++
+## Define the EC2 Instances and key pairs to allow to SSH and Security Groups.
 resource "tls_private_key" "main_private_key" {
     algorithm = "RSA"
     rsa_bits = 4096
 }
-#++
+
 resource "aws_key_pair" "ec2_key_pair_main" {
     key_name = "main-key-pair"
     public_key = tls_private_key.main_private_key.public_key_openssh
 }
-#++
+
 resource "aws_security_group" "main_instances_sg" {
     name = "main-java-app-sg"
     description = "Security Group for AWS Instances that run my Java Spring Boot application."
@@ -182,11 +225,8 @@ resource "aws_security_group" "main_instances_sg" {
         cidr_blocks = ["0.0.0.0/0"]
     }
 
-    tags {
-        Name = "main-java-app-instances-sg"
-    }
 }
-##++
+
 ## AMI: Ubuntu 22.04 LTS Instances.
 resource "aws_instance" "employee_app_instances" {
     ami = "ami-06ce824c157700cd2"
@@ -210,7 +250,6 @@ resource "aws_instance" "employee_app_instances" {
 }
 
 ## Defined the Application Load Balancer, security group, listener and Target group.
-##++
 resource "aws_security_group" "application_load_balancer_sg" {
     name = "main-load-balancer-sg"
     description = "Security Group for the application load balancer of employee management app."
@@ -238,21 +277,39 @@ resource "aws_lb" "employee_management_app_lb" {
     name = "main-load-balancer"
     load_balancer_type = "application"
     security_groups = [aws_security_group.application_load_balancer_sg.id]
-
 }
 
-resource "aws_lb_listener" "" {
-  
+resource "aws_lb_listener" "application_lb_target_group" {
+    load_balancer_arn = "${aws_lb.employee_management_app_lb.arn}"
+    protocol = "HTTPS"
+    port = 443
+
+    default_action {
+    target_group_arn = "${aws_lb_target_group.main_lb_target_group.arn}"
+    type = "forward"
+        }
 }
 
 resource "aws_lb_target_group" "main_lb_target_group" {
-  
+  name = "employeemanapp-lb-target-group"
+  target_type = "alb"
+  protocol = "HTTP"
+  port = 8080
 }
 
+resource "aws_lb_target_group_attachment" "attach_instance_first" {
+  target_group_arn = "${aws_lb_target_group.main_lb_target_group.arn}"
+  target_id        = "${aws_instance.employee_app_instances[0].id}"
+  port             = 8080
+}
 
+resource "aws_lb_target_group_attachment" "attach_instance_second" {
+  target_group_arn = "${aws_lb_target_group.main_lb_target_group.arn}"
+  target_id        = "${aws_instance.employee_app_instances[1].id}"
+  port             = 8080
+}
 
-
-## ++ Defined the Amazon RDS MySQL datbase and security group for it.
+## Defined the Amazon RDS MySQL datbase and security group for it.
 resource "random_password" "db_password" {
     length = 11
     special = true
