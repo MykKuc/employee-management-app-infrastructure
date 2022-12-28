@@ -143,7 +143,7 @@ resource "aws_s3_bucket_website_configuration" "www_employeemanagementapp_com_bu
 }
 
 
-## Define the EC2 Instances and key pairs to allow to SSH and Security Groups.
+## ++ Define the EC2 Instances and key pairs to allow to SSH and Security Groups.
 ## ++
 resource "tls_private_key" "main_private_key" {
     algorithm = "RSA"
@@ -154,51 +154,94 @@ resource "aws_key_pair" "ec2_key_pair_main" {
     key_name = "main-key-pair"
     public_key = tls_private_key.main_private_key.public_key_openssh
 }
-
+#++
 resource "aws_security_group" "main_instances_sg" {
     name = "main-java-app-sg"
     description = "Security Group for AWS Instances that run my Java Spring Boot application."
 
     ingress {
-
+        description = "Inbound traffic from port 8080. This is the default Apache Tomcat port."
+        from_port = 8080
+        to_port = 8080
+        protocol = "TCP"
+        cidr_blocks = [aws_security_group.application_load_balancer_sg.id]
     }
 
-    egress {
+    ingress {
+        description = "Inbound traffic from port 22 to SSH into the instance."
+        from_port = 22
+        to_port = 22
+        protocol = "TCP"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
 
+    egress{
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
     }
 
     tags {
         Name = "main-java-app-instances-sg"
     }
 }
-
+##++
+## AMI: Ubuntu 22.04 LTS Instances.
 resource "aws_instance" "employee_app_instances" {
     ami = "ami-06ce824c157700cd2"
     instance_type = "t3.nano"
     count = 2
     key_name = aws_key_pair.ec2_key_pair_main.key_name
+    vpc_security_group_ids = [aws_security_group.main_instances_sg.id]
 
     root_block_device {
       delete_on_termination = true
       volume_type = "gp2"
       volume_size = "10"
     }
+
+    user_data = <<EOF
+        #! /usr/bash
+        apt update -y;
+        apt upgrade -y;
+        apt install openjdk-11-jdk -y;
+    EOF
 }
 
-## Defined the security group for Application Load Balancer.
+## Defined the Application Load Balancer, security group, listener and Target group.
+##++
 resource "aws_security_group" "application_load_balancer_sg" {
     name = "main-load-balancer-sg"
     description = "Security Group for the application load balancer of employee management app."
 
-  
+    ingress {
+        description = "Allow traffic to Load Balancer through HTTPS protocol."
+        from_port = 443
+        to_port = 443
+        protocol = "TCP"
+        cidr_blocks      = ["0.0.0.0/0"]
+        ipv6_cidr_blocks = ["::/0"]
+    }
+
+    egress{
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
 }
 
 
-## Define the Application Load Balancer, listener and Target group.
+
 resource "aws_lb" "employee_management_app_lb" {
     name = "main-load-balancer"
-
     load_balancer_type = "application"
+    security_groups = [aws_security_group.application_load_balancer_sg.id]
+
+}
+
+resource "aws_lb_listener" "" {
   
 }
 
