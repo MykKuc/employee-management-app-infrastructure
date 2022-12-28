@@ -1,6 +1,6 @@
 terraform {
     required_providers {
-        aws = {
+    aws = {
             source = "hashicorp/aws"
             version = "4.48.0"
     }
@@ -8,6 +8,11 @@ terraform {
     tls = {
       source = "hashicorp/tls"
       version = "4.0.4"
+    }
+
+    random = {
+      source = "hashicorp/random"
+      version = "3.4.3"
     }
   }
 }
@@ -42,26 +47,39 @@ resource "aws_route53_record" "name" {
 }
 
 ## Define the CloudFront distributions.
-
+## Origins have to be S3 Buckets.
 resource "aws_cloudfront_distribution" "employeemanagementapp_com_distribution" {
-  
+
+  enabled = true
+  origin {
+    domain_name = ""
+
+    origin_shield {
+      
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "www_employeemanagementapp_com_distribution" {
 
-  
+  enabled = true
+  origin {
+    domain_name = ""
+  }
 }
 
 
-## Definition of TLS/SSL certificate.
-resource "aws_acm_certificate" "name" {
-    
-  
+## ++ Definition of TLS/SSL certificate.
+resource "aws_acm_certificate" "employeemanagementapp_certificate" {
+    domain_name = "employeemanagementapp.com"
+    validation_method = "DNS"
+    subject_alternative_names = [
+        "www.employeemanagementapp.com" 
+    ]
 }
 
 
-## Define the S3 Bucket and static website hosting.
-## ++
+## ++ Define the S3 Bucket and static website hosting.
 resource "aws_s3_bucket_policy" "s3_employeemanagementapp_com_policy" {
   bucket = aws_s3_bucket.employeemanagementapp_com_bucket.id
   policy = <<EOF
@@ -79,7 +97,7 @@ resource "aws_s3_bucket_policy" "s3_employeemanagementapp_com_policy" {
 }
   EOF
 }
-## ++
+
 resource "aws_s3_bucket_policy" "s3_www_employeemanagementapp_com_policy" {
     bucket = aws_s3_bucket.www_employeemanagementapp_com_bucket.id
     policy = <<EOF
@@ -97,16 +115,16 @@ resource "aws_s3_bucket_policy" "s3_www_employeemanagementapp_com_policy" {
 }
 EOF
 }
-#++
+
 resource "aws_s3_bucket" "employeemanagementapp_com_bucket" {
   bucket = "employeemanagementapp.com"
 }
-##++
+
 resource "aws_s3_bucket" "www_employeemanagementapp_com_bucket" {
   bucket = "www.employeemanagementapp.com"
 }
 
-##++
+
 resource "aws_s3_bucket_website_configuration" "employeemanagementapp_com_bucket_website" {
   bucket = aws_s3_bucket.employeemanagementapp_com_bucket.bucket
   index_document {
@@ -114,7 +132,7 @@ resource "aws_s3_bucket_website_configuration" "employeemanagementapp_com_bucket
   }
 }
 
-## ++
+
 resource "aws_s3_bucket_website_configuration" "www_employeemanagementapp_com_bucket_website" {
   bucket = aws_s3_bucket.www_employeemanagementapp_com_bucket.bucket
 
@@ -123,8 +141,6 @@ resource "aws_s3_bucket_website_configuration" "www_employeemanagementapp_com_bu
     protocol = "https"
   }
 }
-
-# There is another Terraform resource for Website Hosting.
 
 
 ## Define the EC2 Instances and key pairs to allow to SSH and Security Groups.
@@ -193,25 +209,41 @@ resource "aws_lb_target_group" "main_lb_target_group" {
 
 
 
-## Define the Amazon RDS MySQL datbase and security group for it.
-## I need to configure incoming traffic from EC2 Instances.
+## ++ Defined the Amazon RDS MySQL datbase and security group for it.
+resource "random_password" "db_password" {
+    length = 11
+    special = true
+    override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+
+resource "aws_secretsmanager_secret" "main_sql_db_login_secret" {
+    name = "main-db-logins"
+    description = "This is a secret for login credentials to main application MySQL database."
+    
+}
+
+resource "aws_secretsmanager_secret_version" "assign_secret" {
+    secret_id = aws_secretsmanager_secret.main_sql_db_login_secret.id
+    secret_string = random_password.db_password.result
+}
+
 resource "aws_security_group" "main_db_sg" {
     name = "main-sql-db-sg"
     description = "Security Group for main database of the Employee Management Application."
 
     ingress {
+        description = "Allow to communicate through 3306 Port."
         from_port = 3306
         to_port = 3306
         protocol = "TCP"
-
     }
     
     egress{
-
         from_port = 0
         to_port = 0
-
-
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
     }
 }
 
@@ -223,5 +255,6 @@ resource "aws_db_instance" "employee_management_database" {
     engine_version = "8.0"
     skip_final_snapshot = true
     username = "administrator"
-  
+    password = aws_secretsmanager_secret_version.assign_secret
+    vpc_security_group_ids = [aws_security_group.main_db_sg.id]
 }
